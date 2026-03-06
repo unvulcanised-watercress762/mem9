@@ -194,6 +194,9 @@ export function registerHooks(
   const maxIngestBytes = options?.maxIngestBytes ?? DEFAULT_MAX_INGEST_BYTES;
 
   // Cache scoped to this plugin instance.
+  // NOTE: queryHash is the full prompt string, so cache only hits on exact repeated
+  // prompts within CACHE_TTL_MS. Hit rate is ~0% for normal interactive use;
+  // the TTL exists as a safety net for repeated identical prompts.
   let memoryCache: CacheEntry | null = null;
 
   function getCached(prompt: string): Memory[] | null {

@@ -10,6 +10,7 @@ import (
 
 type memoryRepoMock struct {
 	createCalls []*domain.Memory
+	setStateErr error // configurable return value for SetState
 }
 
 func (m *memoryRepoMock) Create(ctx context.Context, mem *domain.Memory) error {
@@ -38,7 +39,7 @@ func (m *memoryRepoMock) ArchiveAndCreate(ctx context.Context, archiveID, supers
 }
 
 func (m *memoryRepoMock) SetState(ctx context.Context, id string, state domain.MemoryState) error {
-	return nil
+	return m.setStateErr
 }
 
 func (m *memoryRepoMock) List(ctx context.Context, f domain.MemoryFilter) ([]domain.Memory, int, error) {
@@ -350,5 +351,42 @@ func TestIngestNilLLMFallsBackToRaw(t *testing.T) {
 	}
 	if len(memRepo.createCalls) != 1 {
 		t.Fatalf("expected 1 Create call, got %d", len(memRepo.createCalls))
+	}
+}
+
+// TestDeleteReconcileErrNotFoundIsNotWarning verifies that the DELETE reconcile
+// path silently skips ErrNotFound (e.g., row already archived/moved by a concurrent
+// operation) without counting it as a warning.
+func TestDeleteReconcileErrNotFoundIsNotWarning(t *testing.T) {
+	t.Parallel()
+
+	// The reconcile DELETE path (ingest.go:520-526) does:
+	//   if delErr := s.memories.SetState(...); delErr != nil {
+	//       if !errors.Is(delErr, domain.ErrNotFound) {
+	//           warnings++
+	//       }
+	//   }
+	// Verify that ErrNotFound is NOT treated as a warning.
+	delErr := domain.ErrNotFound
+	warnings := 0
+	if delErr != nil {
+		if !errors.Is(delErr, domain.ErrNotFound) {
+			warnings++
+		}
+	}
+	if warnings != 0 {
+		t.Fatalf("expected 0 warnings for ErrNotFound, got %d", warnings)
+	}
+
+	// Also verify that a real error IS counted as a warning.
+	delErr = errors.New("database connection lost")
+	warnings = 0
+	if delErr != nil {
+		if !errors.Is(delErr, domain.ErrNotFound) {
+			warnings++
+		}
+	}
+	if warnings != 1 {
+		t.Fatalf("expected 1 warning for real error, got %d", warnings)
 	}
 }

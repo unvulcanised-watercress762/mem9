@@ -217,18 +217,34 @@ func TestSetState(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	states := []domain.MemoryState{domain.StatePaused, domain.StateActive, domain.StateArchived, domain.StateDeleted}
-	for _, s := range states {
-		if err := repo.SetState(ctx, m.ID, s); err != nil {
-			t.Fatalf("SetState(%s): %v", s, err)
-		}
-		var got string
-		if err := testDB.QueryRowContext(ctx, "SELECT state FROM memories WHERE id = ?", m.ID).Scan(&got); err != nil {
-			t.Fatalf("query state: %v", err)
-		}
-		if got != string(s) {
-			t.Fatalf("state mismatch: got %q want %q", got, s)
-		}
+	// active → paused should succeed (SetState only transitions from active).
+	if err := repo.SetState(ctx, m.ID, domain.StatePaused); err != nil {
+		t.Fatalf("SetState(paused): %v", err)
+	}
+
+	// paused → deleted should fail — row is not active.
+	if err := repo.SetState(ctx, m.ID, domain.StateDeleted); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("SetState on non-active row: got %v, want ErrNotFound", err)
+	}
+
+	// Reset to active via raw SQL so we can test more transitions.
+	if _, err := testDB.ExecContext(ctx, "UPDATE memories SET state = 'active' WHERE id = ?", m.ID); err != nil {
+		t.Fatalf("reset state: %v", err)
+	}
+
+	// active → archived should succeed.
+	if err := repo.SetState(ctx, m.ID, domain.StateArchived); err != nil {
+		t.Fatalf("SetState(archived): %v", err)
+	}
+
+	// archived → deleted should fail — row is not active.
+	if err := repo.SetState(ctx, m.ID, domain.StateDeleted); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("SetState on archived row: got %v, want ErrNotFound", err)
+	}
+
+	// Non-existent ID should return ErrNotFound.
+	if err := repo.SetState(ctx, "nonexistent-id", domain.StateDeleted); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("SetState on missing ID: got %v, want ErrNotFound", err)
 	}
 }
 

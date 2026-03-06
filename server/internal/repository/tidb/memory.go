@@ -246,7 +246,7 @@ func (r *MemoryRepo) ArchiveAndCreate(ctx context.Context, archiveID, superseded
 
 func (r *MemoryRepo) SetState(ctx context.Context, id string, state domain.MemoryState) error {
 	result, err := r.db.ExecContext(ctx,
-		`UPDATE memories SET state = ?, updated_at = NOW() WHERE id = ?`,
+		`UPDATE memories SET state = ?, updated_at = NOW() WHERE id = ? AND state = 'active'`,
 		string(state), id,
 	)
 	if err != nil {
