@@ -1,6 +1,6 @@
 ---
 name: mem9
-version: 2.2.0
+version: 1.0.0
 description: |
    Persistent cloud memory for OpenClaw agents.
 
