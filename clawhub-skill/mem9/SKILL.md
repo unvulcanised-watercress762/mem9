@@ -1,13 +1,29 @@
 ---
 name: mem9
-version: 2.0.0
+version: 2.2.0
 description: |
-  Persistent cloud memory for OpenClaw agents. Use when: "install mem9",
-  "setup memory", "openclaw memory plugin", "mem9 onboarding",
-  "migrate memory files", "memory not working", "upload sessions".
-  Do NOT use for day-to-day memory_store/memory_search after setup completes.
+   Persistent cloud memory for OpenClaw agents.
+
+   Use when users say:
+   - "install mem9"
+   - "setup memory"
+   - "add memory plugin"
+   - "openclaw memory"
+   - "mem9 onboarding"
+   - "memory not working"
+   - "import memories"
+   - "upload sessions"
+   
 author: qiffang
-keywords: [mem9, openclaw, memory, plugin, persistent-memory, cloud-memory]
+keywords:
+   - mem9
+   - memory plugin
+   - persistent memory
+   - agent memory
+   - install memory
+   - setup memory
+   - openclaw memory
+   - cloud memory
 metadata:
   openclaw:
     emoji: "🧠"
@@ -30,7 +46,9 @@ metadata:
 
 # mem9
 
-Your agent forgets nothing. Stateless plugin → REST API → TiDB.
+Your agent forgets nothing. Stateless plugin → REST API → DB.
+
+Persistent memory for AI agents.
 
 No authentication. Tenant ID in URL path is the only identifier.
 
@@ -85,7 +103,7 @@ Unclaimed tenants are destroyed at expiry. There is no renewal API.
 `[AGENT]`
 
 ```bash
-openclaw plugins install @mem9/openclaw
+openclaw plugins install @mem9/mem9
 ```
 
 ### Step 3 — Configure openclaw.json
@@ -94,8 +112,8 @@ openclaw plugins install @mem9/openclaw
 
 ```bash
 jq --arg tid "$TENANT_ID" '
-  .plugins.slots.memory = "mnemo" |
-  .plugins.entries.mnemo = {
+  .plugins.slots.memory = "mem9" |
+  .plugins.entries.mem9 = {
     enabled: true,
     config: { apiUrl: "https://api.mem9.ai", tenantID: $tid }
   }
@@ -107,9 +125,9 @@ Or if no `openclaw.json` exists, create:
 ```json
 {
   "plugins": {
-    "slots": { "memory": "mnemo" },
+    "slots": { "memory": "mem9" },
     "entries": {
-      "mnemo": {
+      "mem9": {
         "enabled": true,
         "config": {
           "apiUrl": "https://api.mem9.ai",
@@ -121,23 +139,87 @@ Or if no `openclaw.json` exists, create:
 }
 ```
 
-### Step 4 — Verify
+If result returns stored memory → setup successful.
 
-`[HUMAN]` Restart OpenClaw.
+---
 
-`[AGENT]` Functional round-trip:
+
+## API Reference
+
+Base: `https://api.mem9.ai`  
+Routes: `/v1alpha1/mem9s/{tenantID}/...`  
+Header: `X-Mnemo-Agent-Id: <name>` (optional)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1alpha1/mem9s` | Provision tenant |
+| GET | `/healthz` | Health check |
+| POST | `/{tid}/memories` | Create memory |
+| GET | `/{tid}/memories` | Search (`?q=`, `?tags=`, `?source=`, `?limit=`) |
+| GET | `/{tid}/memories/{id}` | Get by ID |
+| PUT | `/{tid}/memories/{id}` | Update |
+| DELETE | `/{tid}/memories/{id}` | Delete |
+| POST | `/{tid}/imports` | Upload file (multipart) |
+| GET | `/{tid}/imports` | List import tasks |
+| GET | `/{tid}/imports/{id}` | Task status |
+
+---
+
+## Examples
 
 ```bash
-# Store
-curl -sX POST "https://api.mem9.ai/v1alpha1/mem9s/$TENANT_ID/memories" \
-  -H "Content-Type: application/json" \
-  -d '{"content":"mem9 works","tags":["verify"]}'
-
-# Search
-curl -s "https://api.mem9.ai/v1alpha1/mem9s/$TENANT_ID/memories?q=mem9+works"
+export TENANT_ID="your-tenant-id"
+export API="https://api.mem9.ai/v1alpha1/mem9s/$TENANT_ID"
 ```
 
-Search returns the stored memory → setup complete.
+**Store:**
+```bash
+curl -sX POST "$API/memories" -H "Content-Type: application/json" \
+  -d '{"content":"Project uses PostgreSQL 15","tags":["tech"],"source":"agent-1"}'
+```
+
+**Search:**
+```bash
+curl -s "$API/memories?q=postgres&limit=5"
+curl -s "$API/memories?tags=tech&source=agent-1"
+```
+
+**Get/Update/Delete:**
+```bash
+curl -s "$API/memories/{id}"
+curl -sX PUT "$API/memories/{id}" -H "Content-Type: application/json" -d '{"content":"updated"}'
+curl -sX DELETE "$API/memories/{id}"
+```
+
+**Import files:**
+```bash
+# Memory file
+curl -sX POST "$API/imports" -F "file=@memory.json" -F "agent_id=agent-1" -F "file_type=memory"
+
+# Session file
+curl -sX POST "$API/imports" -F "file=@session.json" -F "agent_id=agent-1" -F "file_type=session" -F "session_id=ses-001"
+
+# Check status
+curl -s "$API/imports"
+```
+
+---
+
+## Default Import Behavior
+
+When user says "import memories to mem9" without specifying files:
+
+1. Scan agent workspace for memory/session files
+2. Upload **15 most recent** (by mtime)
+3. **Upload in parallel** for speed
+**Paths to scan:**
+```
+./memory.json         → file_type=memory
+./memories.json       → file_type=memory
+./memories/*.json     → file_type=memory
+./sessions/*.json     → file_type=session (session_id = filename)
+./session/*.json      → file_type=session (session_id = filename)
+```
 
 ---
 
@@ -145,7 +227,7 @@ Search returns the stored memory → setup complete.
 
 | Symptom | Fix |
 |---------|-----|
-| Plugin not loading | Check `slots.memory = "mnemo"` and `entries.mnemo.enabled = true` |
+| Plugin not loading | Check `slots.memory = "mem9"` and `entries.mem9.enabled = true` |
 | `404` on API call | Verify tenantID; run `curl https://api.mem9.ai/healthz` |
 ---
 
