@@ -630,6 +630,14 @@ func TestReconcileFallbackWritesNothing(t *testing.T) {
 	if len(memRepo.createCalls) != 0 {
 		t.Fatalf("expected 0 Create calls (safe fallback), got %d", len(memRepo.createCalls))
 	}
+	// LLM failure should produce warnings=1 and status="partial" so callers
+	// can distinguish "nothing to remember" from "reconciliation failed."
+	if res.Warnings != 1 {
+		t.Fatalf("expected 1 warning for reconciliation LLM failure, got %d", res.Warnings)
+	}
+	if res.Status != "partial" {
+		t.Fatalf("expected status 'partial' for reconciliation LLM failure, got %q", res.Status)
+	}
 }
 
 // TestGatherExistingMemoriesFiltersLowScoreVectorResults verifies that vector
@@ -638,8 +646,9 @@ func TestReconcileFallbackWritesNothing(t *testing.T) {
 func TestGatherExistingMemoriesFiltersLowScoreVectorResults(t *testing.T) {
 	t.Parallel()
 
-	highScore := 0.8
-	lowScore := 0.1
+	// Pin scores close to the 0.3 boundary to catch accidental threshold changes.
+	highScore := 0.31
+	lowScore := 0.29
 
 	memRepo := &memoryRepoMock{
 		vectorResults: []domain.Memory{

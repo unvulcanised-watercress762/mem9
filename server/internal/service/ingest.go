@@ -118,8 +118,13 @@ func (s *IngestService) Ingest(ctx context.Context, agentName string, req Ingest
 		return &IngestResult{Status: "failed", Warnings: warnings}, nil
 	}
 
+	status := "complete"
+	if warnings > 0 && len(insightIDs) == 0 {
+		status = "partial" // Facts extracted but reconciliation failed — no memories written
+	}
+
 	return &IngestResult{
-		Status:          "complete",
+		Status:          status,
 		MemoriesChanged: len(insightIDs),
 		InsightIDs:      insightIDs,
 		Warnings:        warnings,
@@ -383,7 +388,7 @@ Analyze the new facts and determine whether each should be added, updated, or de
 	raw, err := s.llm.CompleteJSON(ctx, systemPrompt, userPrompt)
 	if err != nil {
 		slog.Warn("reconciliation LLM call failed, skipping to avoid duplicates", "err", err)
-		return nil, 0, nil
+		return nil, 1, nil // warnings=1 signals that facts were extracted but reconciliation was skipped
 	}
 
 	type reconcileEvent struct {
@@ -403,12 +408,12 @@ Analyze the new facts and determine whether each should be added, updated, or de
 			"Your previous response was not valid JSON. Return ONLY the JSON object.\n\n"+userPrompt)
 		if retryErr != nil {
 			slog.Warn("reconciliation retry failed, skipping to avoid duplicates", "err", retryErr)
-			return nil, 0, nil
+			return nil, 1, nil // warnings=1 signals that facts were extracted but reconciliation was skipped
 		}
 		parsed, err = llm.ParseJSON[reconcileResponse](raw2)
 		if err != nil {
 			slog.Warn("reconciliation JSON parse failed after retry, skipping to avoid duplicates", "err", err)
-			return nil, 0, nil
+			return nil, 1, nil // warnings=1 signals that facts were extracted but reconciliation was skipped
 		}
 	}
 
@@ -504,38 +509,6 @@ func (s *IngestService) gatherExistingMemories(ctx context.Context, agentID stri
 		AgentID:    agentID,
 	}
 
-	// No vector search available.
-	if s.embedder == nil && s.autoModel == "" {
-		if s.memories.FTSAvailable() {
-			// FTS-only deployment: run per-fact FTS search (leg 2 only).
-			seen := make(map[string]struct{})
-			var result []domain.Memory
-			addUnseen := func(matches []domain.Memory) {
-				for _, m := range matches {
-					if _, ok := seen[m.ID]; ok {
-						continue
-					}
-					seen[m.ID] = struct{}{}
-					m.Content = truncateRunes(m.Content, contentMaxLen)
-					result = append(result, m)
-				}
-			}
-			for _, fact := range facts {
-				kwMatches, kwErr := s.memories.FTSSearch(ctx, fact, filter, perFactLimit)
-				if kwErr != nil {
-					return nil, fmt.Errorf("FTS search for fact %q: %w", truncateRunes(fact, 50), kwErr)
-				}
-				addUnseen(kwMatches)
-			}
-			if len(result) > maxExistingMemories {
-				result = result[:maxExistingMemories]
-			}
-			return result, nil
-		}
-		// No vector, no FTS — should not happen on TiDB Serverless.
-		return nil, fmt.Errorf("no search backend available: autoModel and embedder are both unconfigured, FTS is unavailable")
-	}
-
 	seen := make(map[string]struct{})
 	var result []domain.Memory
 
@@ -552,6 +525,26 @@ func (s *IngestService) gatherExistingMemories(ctx context.Context, agentID stri
 			m.Content = truncateRunes(m.Content, contentMaxLen)
 			result = append(result, m)
 		}
+	}
+
+	// No vector search available.
+	if s.embedder == nil && s.autoModel == "" {
+		if s.memories.FTSAvailable() {
+			// FTS-only deployment: run per-fact FTS search (leg 2 only, no threshold).
+			for _, fact := range facts {
+				kwMatches, kwErr := s.memories.FTSSearch(ctx, fact, filter, perFactLimit)
+				if kwErr != nil {
+					return nil, fmt.Errorf("FTS search for fact %q: %w", truncateRunes(fact, 50), kwErr)
+				}
+				addUnseen(kwMatches, false)
+			}
+			if len(result) > maxExistingMemories {
+				result = result[:maxExistingMemories]
+			}
+			return result, nil
+		}
+		// No vector, no FTS — should not happen on TiDB Serverless.
+		return nil, fmt.Errorf("no search backend available: autoModel and embedder are both unconfigured, FTS is unavailable")
 	}
 
 	for _, fact := range facts {
@@ -597,8 +590,8 @@ func (s *IngestService) gatherExistingMemories(ctx context.Context, agentID stri
 	return result, nil
 }
 
-// addAllFacts adds all facts as new insights (fallback when reconciliation is
-// not possible, e.g., no existing memories or LLM failure).
+// addAllFacts adds all facts as new insights when no existing memories are
+// found (i.e., all facts are guaranteed new). Called only when gatherExistingMemories returns empty.
 func (s *IngestService) addAllFacts(ctx context.Context, agentName, agentID, sessionID string, facts []string) ([]string, int, error) {
 	var ids []string
 	var warnings int
